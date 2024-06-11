@@ -1,4 +1,10 @@
 {
   "name": "data-loading-and-transforms",
-  "packageManager": "yarn@4.2.2"
+  "packageManager": "yarn@4.2.2",
+  "scripts": {
+    "server": "python3 server/movie_server.py"
+  },
+  "workspaces": [
+    "example"
+  ]
 }
