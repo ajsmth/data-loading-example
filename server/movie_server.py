@@ -9,7 +9,7 @@ fake = Faker()
 def generate_movie_entry():
     movie_id = str(uuid.uuid4())
     title = fake.catch_phrase()
-    year = random.randint(1900, 2023)
+    year = random.randint(1930, 2023)
     rating = round(random.uniform(1, 10), 1)
     genre = fake.word()
     description = fake.sentence(nb_words=15)

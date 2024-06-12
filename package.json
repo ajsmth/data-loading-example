@@ -2,7 +2,8 @@
   "name": "data-loading-and-transforms",
   "packageManager": "yarn@4.2.2",
   "scripts": {
-    "server": "python3 server/movie_server.py"
+    "server": "python3 server/movie_server.py",
+    "start": "cd example && yarn start"
   },
   "workspaces": [
     "example"

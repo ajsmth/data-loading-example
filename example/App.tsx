@@ -1,5 +1,5 @@
 import * as React from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, TextInput, View } from "react-native";
 import { QueryClient, QueryClientProvider, useQuery } from "react-query";
 
 let queryClient = new QueryClient();
@@ -12,16 +12,10 @@ export default function App() {
   );
 }
 
-function fetchMovies(size: number): Promise<MovieItem[]> {
+function fetchMovies(size: number) {
   return fetch(`http://localhost:3001/movies?size=${size}`, {
     headers: { "Content-Type": "application/json" },
-  })
-    .then((res) => {
-      return logTimeAsync("fetchMovies", () => res.json());
-    })
-    .catch((error) => {
-      console.log("Error fetching movies", error);
-    });
+  });
 }
 
 type MovieItem = {
@@ -29,15 +23,28 @@ type MovieItem = {
 };
 
 function Movies() {
-  let size = 10;
+  let [size, setSize] = React.useState(1);
+  let [fetchExecTime, setFetchExecTime] = React.useState<number>(0);
+  let [transformExecTime, setTransformExecTime] = React.useState<number>(0);
+  let [inflightTime, setInflightTime] = React.useState<number>(0);
 
-  let { data } = useQuery({
+  let { data, isFetching } = useQuery({
     queryKey: ["movies", size],
-    queryFn: () => fetchMovies(size),
+    queryFn: async () => {
+      let { result, inflightTime, jsonParseTime } = await measureFetchTimes(
+        "fetchMovies",
+        () => fetchMovies(size)
+      );
+      setFetchExecTime(jsonParseTime);
+      setInflightTime(inflightTime);
+      return result;
+    },
   });
 
   let rows = React.useMemo(() => {
-    return logTime("getRows", () => getRows(data));
+    let { executionTime, result } = logTime("getRows", () => getRows(data));
+    setTransformExecTime(executionTime);
+    return result;
   }, [data]);
 
   let renderItem = React.useCallback(
@@ -48,11 +55,57 @@ function Movies() {
   );
 
   return (
-    <FlatList
-      contentContainerStyle={{ paddingTop: 64 }}
-      renderItem={renderItem}
-      data={rows}
-    />
+    <View style={{ flex: 1 }}>
+      <FlatList
+        contentContainerStyle={{ paddingTop: 64 }}
+        renderItem={renderItem}
+        data={rows}
+      />
+      <View
+        style={{
+          paddingBottom: 50,
+          paddingTop: 16,
+          paddingHorizontal: 16,
+          borderTopWidth: 1,
+          borderColor: "lightgrey",
+          gap: 8,
+          opacity: isFetching ? 0.5 : 1,
+        }}
+      >
+        <Text>
+          Rows:{" "}
+          <Text style={{ fontWeight: "bold" }}>
+            {rows.length.toLocaleString()}
+          </Text>
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Text>Payload Size (MB): </Text>
+
+          <TextInput
+            inputMode="numeric"
+            key={size.toString()}
+            defaultValue={size.toString()}
+            onSubmitEditing={(e) => {
+              setSize(parseInt(e.nativeEvent.text));
+            }}
+            style={{ flex: 1, fontWeight: "bold" }}
+          />
+        </View>
+
+        <Text>
+          Fetch In Flight Time:{" "}
+          <Text style={{ fontWeight: "bold" }}>{inflightTime}ms</Text>
+        </Text>
+        <Text>
+          Fetch Execution Time:{" "}
+          <Text style={{ fontWeight: "bold" }}>{fetchExecTime}ms</Text>
+        </Text>
+        <Text>
+          Transform Execution Time:{" "}
+          <Text style={{ fontWeight: "bold" }}>{transformExecTime}ms</Text>
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -80,7 +133,7 @@ function logTime<T>(message: string, func: () => T) {
   let endTime = Date.now();
   let executionTime = endTime - startTime;
   console.log(`[${message}] Execution time: ${executionTime} milliseconds`);
-  return result;
+  return { result, executionTime };
 }
 
 async function logTimeAsync<T>(message: string, func: () => Promise<T>) {
@@ -89,5 +142,25 @@ async function logTimeAsync<T>(message: string, func: () => Promise<T>) {
   let endTime = Date.now();
   let executionTime = endTime - startTime;
   console.log(`[${message}] Execution time: ${executionTime} milliseconds`);
-  return result;
+  return { result, executionTime };
+}
+
+async function measureFetchTimes<T>(
+  message: string,
+  func: () => Promise<Response>
+) {
+  let fetchStartTime = Date.now();
+  let response = await func();
+  let fetchEndTime = Date.now();
+
+  let inflightTime = fetchEndTime - fetchStartTime;
+  console.log(`[${message}] Fetch time: ${inflightTime} milliseconds`);
+
+  let jsonStartTime = Date.now();
+  let jsonResult = await response.json();
+  let jsonEndTime = Date.now();
+  let jsonParseTime = jsonEndTime - jsonStartTime;
+  console.log(`[${message}] JSON parse time: ${jsonParseTime} milliseconds`);
+
+  return { result: jsonResult, inflightTime, jsonParseTime };
 }
