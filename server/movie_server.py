@@ -2,9 +2,13 @@ from flask import Flask, jsonify, request
 import random
 import uuid
 from faker import Faker
+from flask_caching import Cache
 
 app = Flask(__name__)
 fake = Faker()
+
+# Configure Flask-Caching
+cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': 300})
 
 def generate_movie_entry():
     movie_id = str(uuid.uuid4())
@@ -37,10 +41,14 @@ def generate_movie_data(size_mb):
 
     return movie_data
 
+@cache.memoize()
+def get_cached_movie_data(size_mb):
+    return generate_movie_data(size_mb)
+
 @app.route('/movies', methods=['GET'])
 def get_movies():
     size_mb = request.args.get('size', default=10, type=float)
-    movie_data = generate_movie_data(size_mb)  # Generate specified MB of movie data
+    movie_data = get_cached_movie_data(size_mb)  # Use cached data
     return jsonify(movie_data)
 
 if __name__ == '__main__':
